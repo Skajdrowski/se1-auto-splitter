@@ -1,6 +1,6 @@
-# se1-auto-splitter
+# SE1-auto-splitter
 
-An auto splitter for SniperElite.
+An auto splitter for Sniper Elite Berlin 1945 using Autosplitting runtime.
 
 ## Compilation
 
