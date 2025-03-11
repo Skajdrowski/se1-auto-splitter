@@ -130,7 +130,7 @@ async fn main() {
                     Ok(_) => warRecordArray[0],
                     Err(_) => return
                 };
-                let warRecordStr = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
+                let warRecordStr: &str = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
                     
                 fps = process.read::<f32>(baseAddress + addrStruct.fpsAddress).unwrap_or(0.0);
                     
