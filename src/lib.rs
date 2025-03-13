@@ -59,18 +59,6 @@ impl Addr {
         }
     }
 }
-async fn Attacher() -> Process {
-    loop {
-        if let Some(process) = Process::attach("SniperElite.exe") {
-            return process;
-        }
-        else {
-        asr::print_message("Waiting for game to attach...");
-        sleep(Duration::from_secs(1)).await;
-        }
-    } 
-}
-
 
 async fn main() {
     let mut settings = Settings::register();
@@ -97,105 +85,107 @@ async fn main() {
     
     let mut baseAddress = asr::Address::new(0);
     let mut addrStruct = Addr::steam();
-       
-    let process = Attacher().await;
-    process.until_closes(async {
-        if let (Ok(base), Ok(moduleSize)) = (process.get_module_address("SniperElite.exe"), process.get_module_size("SniperElite.exe")) {
-            baseAddress = base;
-            if moduleSize == 3805184 {
-                addrStruct = Addr::gog();
-            }
-        }
-        unsafe {
-            let mut start = || {
-                cutsByte = process.read::<u8>(baseAddress + addrStruct.cutsAddress).unwrap_or(0);
-                    
-                if startByte == 5 && cutsByte == 0 && oldStart == 2 ||
-                levelStr == "level02a" && startByte == 5 && oldStart == 255 {
-                    asr::timer::start();
-                }
-            };
+    loop {
+        let process = Process::wait_attach("SniperElite.exe").await;
 
-            let levelSplit = || {
-                if levelArray != oldLevel  {
-                    asr::timer::split();
+        process.until_closes(async {
+            if let (Ok(base), Ok(moduleSize)) = (process.get_module_address("SniperElite.exe"), process.get_module_size("SniperElite.exe")) {
+                baseAddress = base;
+                if moduleSize == 3805184 {
+                    addrStruct = Addr::gog();
                 }
-            };
-                
-            let mut isLoading = || {
-                loadByte = process.read::<u8>(baseAddress + addrStruct.loadAddress).unwrap_or(1);
-                briefingByte = process.read::<u8>(baseAddress + addrStruct.briefingAddress).unwrap_or(0);
-                
-                match process.read_into_slice(baseAddress + addrStruct.warRecordAddress, &mut warRecordArray) {
-                    Ok(_) => warRecordArray[0],
-                    Err(_) => return
-                };
-                let warRecordStr: &str = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
-                    
-                fps = process.read::<f32>(baseAddress + addrStruct.fpsAddress).unwrap_or(0.0);
-                    
-                if fps != oldFps {
-                    if oldFps == 60.0 && warRecordStr == "\\splash\\oldmenu1.dds" {
-                        warRecord = 1;
+            }
+            unsafe {
+                let mut start = || {
+                    cutsByte = process.read::<u8>(baseAddress + addrStruct.cutsAddress).unwrap_or(0);
+                        
+                    if startByte == 5 && cutsByte == 0 && oldStart == 2 ||
+                    levelStr == "level02a" && startByte == 5 && oldStart == 255 {
+                        asr::timer::start();
                     }
-                }
-                if warRecordStr == "\\splash\\loading\\level"
-                || warRecordStr == "\\splash\\frontsc2.dds" {
-                    warRecord = 0;
-                }
-                    
-                if loadByte == 0 && (briefingByte != 1 && fps < 1000.0) && warRecord != 1
-                || fps > 1000.0 {
-                    asr::timer::pause_game_time();
-                }
-                else {
-                    asr::timer::resume_game_time();
-                }
-            };
-                
-            let lastSplit = || {   
-                if levelStr == "level08d" && oldStart == 5 && startByte == 2
-                || levelStr == "level02a" && startByte == 5 && mcByte == 256 {
-                    asr::timer::split();
-                }
-            };
-                
-            let individualLvl = || {
-                if startByte == 5 && mcByte == 256 {
-                    asr::timer::split();
-                }
-            };
-            loop {
-                settings.update();
-
-                startByte = process.read::<u8>(baseAddress + addrStruct.startAddress).unwrap_or(0);
-                
-                match process.read_into_slice(baseAddress + addrStruct.levelAddress, &mut levelArray) {
-                    Ok(_) => levelArray[0],
-                    Err(_) => return
                 };
-                levelStr = str::from_utf8(&levelArray).unwrap_or("").split('\0').next().unwrap_or("");
-                
-                mcByte = process.read::<u16>(baseAddress + addrStruct.mcAddress).unwrap_or(0);
-                
-                //let start_time = asr::time_util::Instant::now();
-                if settings.Full_game_run {
-                    levelSplit();
-                    lastSplit();
+
+                let levelSplit = || {
+                    if levelArray != oldLevel  {
+                        asr::timer::split();
+                    }
+                };
+                    
+                let mut isLoading = || {
+                    loadByte = process.read::<u8>(baseAddress + addrStruct.loadAddress).unwrap_or(1);
+                    briefingByte = process.read::<u8>(baseAddress + addrStruct.briefingAddress).unwrap_or(0);
+                    
+                    match process.read_into_slice(baseAddress + addrStruct.warRecordAddress, &mut warRecordArray) {
+                        Ok(_) => warRecordArray[0],
+                        Err(_) => return
+                    };
+                    let warRecordStr: &str = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
+                        
+                    fps = process.read::<f32>(baseAddress + addrStruct.fpsAddress).unwrap_or(0.0);
+                        
+                    if fps != oldFps {
+                        if oldFps == 60.0 && warRecordStr == "\\splash\\oldmenu1.dds" {
+                            warRecord = 1;
+                        }
+                    }
+                    if warRecordStr == "\\splash\\loading\\level"
+                    || warRecordStr == "\\splash\\frontsc2.dds" {
+                        warRecord = 0;
+                    }
+                        
+                    if loadByte == 0 && (briefingByte != 1 && fps < 1000.0) && warRecord != 1
+                    || fps > 1000.0 {
+                        asr::timer::pause_game_time();
+                    }
+                    else {
+                        asr::timer::resume_game_time();
+                    }
+                };
+                    
+                let lastSplit = || {   
+                    if levelStr == "level08d" && oldStart == 5 && startByte == 2
+                    || levelStr == "level02a" && startByte == 5 && mcByte == 256 {
+                        asr::timer::split();
+                    }
+                };
+                    
+                let individualLvl = || {
+                    if startByte == 5 && mcByte == 256 {
+                        asr::timer::split();
+                    }
+                };
+                loop {
+                    settings.update();
+
+                    startByte = process.read::<u8>(baseAddress + addrStruct.startAddress).unwrap_or(0);
+                    
+                    match process.read_into_slice(baseAddress + addrStruct.levelAddress, &mut levelArray) {
+                        Ok(_) => levelArray[0],
+                        Err(_) => return
+                    };
+                    levelStr = str::from_utf8(&levelArray).unwrap_or("").split('\0').next().unwrap_or("");
+                    
+                    mcByte = process.read::<u16>(baseAddress + addrStruct.mcAddress).unwrap_or(0);
+                    
+                    //let start_time = asr::time_util::Instant::now();
+                    if settings.Full_game_run {
+                        levelSplit();
+                        lastSplit();
+                    }
+                    //let end_time = start_time.elapsed();
+                    //asr::print_message(&alloc::format!("Tick time: {:?}", end_time));
+                    if settings.Individual_level {
+                        individualLvl();
+                    }
+                    start();
+                    isLoading();
+                    
+                    oldStart = startByte;
+                    oldFps = fps;
+                    oldLevel = levelArray;
+                    sleep(Duration::from_nanos(16666667)).await;
                 }
-                //let end_time = start_time.elapsed();
-                //asr::print_message(&alloc::format!("Tick time: {:?}", end_time));
-                if settings.Individual_level {
-                    individualLvl();
-                }
-                start();
-                isLoading();
-                
-                oldStart = startByte;
-                oldFps = fps;
-                oldLevel = levelArray;
-                sleep(Duration::from_nanos(16666667)).await;
             }
-        }
-    }).await;
+        }).await;
+    }
 }
