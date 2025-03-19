@@ -7,7 +7,7 @@ edition = "2024"
 
 [dependencies]
 asr = { git = "https://github.com/LiveSplit/asr", features = [
-    "alloc", # Working with allocations.
+    # "alloc", # Working with allocations.
     "derive", # Defining your own settings structs, converting endianness, and binding to .NET classes.
     # "flags", # Working with bit flags.
     # "float-vars", # Setting floating point variables.
@@ -24,7 +24,6 @@ asr = { git = "https://github.com/LiveSplit/asr", features = [
     # "sms", # Accessing SEGA Master System / GameGear emulators.
     # "wii", # Accessing Wii emulators.
 ] }
-dlmalloc = { version = "0.2.8", features = ["global"] }
 
 # Bytemuck can be used to define structs that are being read from the game's process.
 #bytemuck = { version = "1", features = ["derive", "min_const_generics"] }

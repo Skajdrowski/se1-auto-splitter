@@ -5,10 +5,6 @@
 
 use asr::{future::sleep, settings::Gui, Process};
 use core::{str, time::Duration};
-use dlmalloc::GlobalDlmalloc;
-
-#[global_allocator]
-static ALLOCATOR: GlobalDlmalloc = GlobalDlmalloc;
 
 asr::async_main!(stable);
 asr::panic_handler!();
@@ -89,8 +85,9 @@ async fn main() {
         let process = Process::wait_attach("SniperElite.exe").await;
 
         process.until_closes(async {
-            if let (Ok(base), Ok(moduleSize)) = (process.get_module_address("SniperElite.exe"), process.get_module_size("SniperElite.exe")) {
-                baseAddress = base;
+            baseAddress = process.get_module_address("SniperElite.exe").unwrap_or_default();
+
+            if let Ok(moduleSize) = process.get_module_size("SniperElite.exe") {
                 if moduleSize == 3805184 {
                     addrStruct = Addr::gog();
                 }
