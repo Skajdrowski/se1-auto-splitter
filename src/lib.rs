@@ -58,6 +58,7 @@ impl Addr {
 
 async fn main() {
     let mut settings = Settings::register();
+    let map = Map::load();
     let mut conflict = false;
 
     static mut startByte: u8 = 0;
@@ -156,13 +157,10 @@ async fn main() {
                     settings.update();
 
                     if (settings.Full_game_run && settings.Individual_level) && !conflict {
-                        let map = Map::load();
-                        map.insert("Full_game_run", false);
                         map.store();
-
                         conflict = true;
                     }
-                    else if conflict == true {
+                    else {
                         conflict = false;
                     }
 
