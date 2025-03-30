@@ -23,7 +23,6 @@ struct Addr {
     levelAddress: u32,
     warRecordAddress: u32,
     briefingAddress: u32,
-    cutsAddress: u32,
     mcAddress: u32,
     fpsAddress: u32
 }
@@ -36,7 +35,6 @@ impl Addr {
             levelAddress: 0x418EED,
             warRecordAddress: 0x418AA8,
             briefingAddress: 0x3B7299,
-            cutsAddress: 0x3ADB24,
             mcAddress: 0x3AE2E0,
             fpsAddress: 0x368390
         }
@@ -49,7 +47,6 @@ impl Addr {
             levelAddress: 0x380CE5,
             warRecordAddress: 0x394D28,
             briefingAddress: 0x333F91,
-            cutsAddress: 0x35EC4C,
             mcAddress: 0x32B040,
             fpsAddress: 0x2E60D0
         }
@@ -63,8 +60,9 @@ async fn main() {
 
     static mut startByte: u8 = 0;
 
-    let mut loadByte: u8 = 0;
-    let mut briefingByte: u8 = 0;
+    static mut loadByte: u8 = 0;
+    static mut oldLoad: u8 = 0;
+    static mut briefingByte: u8 = 0;
     static mut levelStr: &str = "";
     static mut levelArray: [u8; 8] = [0; 8];
     static mut oldLevel: [u8; 8] = [0; 8];
@@ -77,9 +75,8 @@ async fn main() {
     static mut mcByte: u16 = 0;
 
     let mut warRecord: u8 = 0;
-    let mut warRecordArray: [u8; 21] = [0; 21];
-
-    let mut cutsByte: u8 = 0;
+    static mut warRecordArray: [u8; 21] = [0; 21];
+    static mut warRecordStr: &str = "";
 
     let mut baseAddress = asr::Address::new(0);
     let mut addrStruct = Addr::steam();
@@ -95,11 +92,9 @@ async fn main() {
                 }
             }
             unsafe {
-                let mut start = || {
-                    cutsByte = process.read::<u8>(baseAddress + addrStruct.cutsAddress).unwrap_or(0);
-
-                    if startByte == 5 && cutsByte == 0 && oldStart == 2 ||
-                    levelStr == "level02a" && startByte == 5 && oldStart == 255 {
+                let start = || {
+                    if briefingByte == 1 && fps < 1000.0 ||
+                    (loadByte == 1 && oldLoad != 1) && fps != 60.0 && warRecordStr == "\\splash\\Loadbar.dds" {
                         asr::timer::start();
                     }
                 };
@@ -114,11 +109,8 @@ async fn main() {
                     loadByte = process.read::<u8>(baseAddress + addrStruct.loadAddress).unwrap_or(1);
                     briefingByte = process.read::<u8>(baseAddress + addrStruct.briefingAddress).unwrap_or(0);
 
-                    match process.read_into_slice(baseAddress + addrStruct.warRecordAddress, &mut warRecordArray) {
-                        Ok(_) => warRecordArray[0],
-                        Err(_) => return
-                    };
-                    let warRecordStr: &str = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
+                    process.read_into_slice(baseAddress + addrStruct.warRecordAddress, &mut warRecordArray).unwrap_or_default();
+                    warRecordStr = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
 
                     fps = process.read::<f32>(baseAddress + addrStruct.fpsAddress).unwrap_or(0.0);
 
@@ -165,28 +157,25 @@ async fn main() {
                     }
 
                     startByte = process.read::<u8>(baseAddress + addrStruct.startAddress).unwrap_or(0);
+                    mcByte = process.read::<u16>(baseAddress + addrStruct.mcAddress).unwrap_or(0);
 
                     process.read_into_slice(baseAddress + addrStruct.levelAddress, &mut levelArray).unwrap_or_default();
                     levelStr = str::from_utf8(&levelArray).unwrap_or("").split('\0').next().unwrap_or("");
 
-                    mcByte = process.read::<u16>(baseAddress + addrStruct.mcAddress).unwrap_or(0);
-
-                    //let start_time = asr::time_util::Instant::now();
                     if settings.Full_game_run {
                         levelSplit();
                         lastSplit();
                     }
-                    //let end_time = start_time.elapsed();
-                    //asr::print_message(&alloc::format!("Tick time: {:?}", end_time));
                     if settings.Individual_level {
                         individualLvl();
                     }
-                    start();
                     isLoading();
+                    start();
 
                     oldStart = startByte;
                     oldFps = fps;
                     oldLevel = levelArray;
+                    oldLoad = loadByte;
                     sleep(Duration::from_nanos(16666667)).await;
                 }
             }
