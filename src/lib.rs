@@ -114,10 +114,8 @@ async fn main() {
 
                     fps = process.read::<f32>(baseAddress + addrStruct.fpsAddress).unwrap_or(0.0);
 
-                    if fps != oldFps {
-                        if oldFps == 60.0 && warRecordStr == "\\splash\\oldmenu1.dds" {
-                            warRecord = 1;
-                        }
+                    if fps != oldFps && oldFps == 60.0 && warRecordStr == "\\splash\\oldmenu1.dds" {
+                        warRecord = 1;
                     }
                     if warRecordStr == "\\splash\\loading\\level"
                     || warRecordStr == "\\splash\\frontsc2.dds" {
