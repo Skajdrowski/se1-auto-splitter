@@ -93,7 +93,7 @@ async fn main() {
             }
             unsafe {
                 let start = || {
-                    if briefingByte == 1 && fps < 1000.0 ||
+                    if briefingByte == 1 && fps < 10000.0 ||
                     (loadByte == 1 && oldLoad != 1) && fps != 60.0 && warRecordStr == "\\splash\\Loadbar.dds" {
                         asr::timer::start();
                     }
@@ -124,8 +124,8 @@ async fn main() {
                         warRecord = 0;
                     }
 
-                    if loadByte == 0 && (briefingByte != 1 && fps < 1000.0) && warRecord != 1
-                    || fps > 1000.0 {
+                    if loadByte == 0 && (briefingByte != 1 && fps < 10000.0) && warRecord != 1
+                    || fps > 10000.0 {
                         asr::timer::pause_game_time();
                     }
                     else {
