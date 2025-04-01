@@ -3,8 +3,8 @@
 #![allow(non_upper_case_globals)]
 #![allow(static_mut_refs)]
 
-use asr::{future::sleep, settings::{Gui, Map}, Process};
-use core::{str, time::Duration};
+use asr::{future::next_tick, settings::{Gui, Map}, Process};
+use core::{str};
 
 asr::async_main!(stable);
 asr::panic_handler!();
@@ -14,7 +14,9 @@ struct Settings {
     #[default = true]
     Full_game_run: bool,
     #[default = false]
-    Individual_level: bool
+    Individual_level: bool,
+    #[default = false]
+    Slow_PC_mode: bool
 }
 
 struct Addr {
@@ -55,8 +57,10 @@ impl Addr {
 
 async fn main() {
     let mut settings = Settings::register();
-    let map = Map::load();
-    let mut conflict = false;
+    let mut map = Map::load();
+
+    let mut tickToggled = false;
+    asr::set_tick_rate(60.0);
 
     static mut startByte: u8 = 0;
 
@@ -146,12 +150,19 @@ async fn main() {
                 loop {
                     settings.update();
 
-                    if (settings.Full_game_run && settings.Individual_level) && !conflict {
+                    if settings.Full_game_run && settings.Individual_level {
                         map.store();
-                        conflict = true;
                     }
-                    else {
-                        conflict = false;
+
+                    if settings.Slow_PC_mode && !tickToggled {
+                        asr::set_tick_rate(30.0);
+                        map = Map::load();
+                        tickToggled = true;
+                    }
+                    else if !settings.Slow_PC_mode && tickToggled {
+                        asr::set_tick_rate(60.0);
+                        map = Map::load();
+                        tickToggled = false;
                     }
 
                     startByte = process.read::<u8>(baseAddress + addrStruct.startAddress).unwrap_or(0);
@@ -174,7 +185,7 @@ async fn main() {
                     oldFps = fps;
                     oldLevel = levelArray;
                     oldLoad = loadByte;
-                    sleep(Duration::from_nanos(16666667)).await;
+                    next_tick().await;
                 }
             }
         }).await;
