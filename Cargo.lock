@@ -11,12 +11,11 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "asr"
 version = "0.1.0"
-source = "git+https://github.com/LiveSplit/asr#ed5e8320ab3c55616ad7b9a3e1f097c69e67b805"
+source = "git+https://github.com/LiveSplit/asr#df73b99f7623fe952b8c008f01a5cd241587d5cd"
 dependencies = [
  "arrayvec",
  "asr-derive",
  "bytemuck",
- "libm",
  "time",
  "wasi",
 ]
@@ -24,7 +23,7 @@ dependencies = [
 [[package]]
 name = "asr-derive"
 version = "0.1.0"
-source = "git+https://github.com/LiveSplit/asr#ed5e8320ab3c55616ad7b9a3e1f097c69e67b805"
+source = "git+https://github.com/LiveSplit/asr#df73b99f7623fe952b8c008f01a5cd241587d5cd"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -54,9 +53,9 @@ dependencies = [
 
 [[package]]
 name = "deranged"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9e6a11ca8224451684bc0d7d5a7adbf8f2fd6887261a1cfc3c0432f9d4068e"
+checksum = "28cfac68e08048ae1883171632c2aef3ebc555621ae56fbccce1cbf22dd7f058"
 dependencies = [
  "powerfmt",
 ]
@@ -66,12 +65,6 @@ name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
-
-[[package]]
-name = "libm"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
 
 [[package]]
 name = "num-conv"

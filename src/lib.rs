@@ -72,7 +72,7 @@ async fn main() {
     static mut oldLevel: [u8; 8] = [0; 8];
 
     static mut oldStart: u8 = 0;
-    
+
     static mut fps: f32 = 0.0;
     static mut oldFps: f32 = 0.0;
 
