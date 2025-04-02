@@ -1,10 +1,24 @@
 #![no_std]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![allow(static_mut_refs)]
+#![warn(
+    clippy::complexity,
+    clippy::correctness,
+    clippy::perf,
+    clippy::style,
+    clippy::undocumented_unsafe_blocks,
+    rust_2018_idioms
+)]
 
-use asr::{future::next_tick, settings::{Gui, Map}, Process};
-use core::{str};
+use asr::{
+    Address, Process,
+    file_format::pe,
+    future::{next_tick, retry},
+    settings::{Gui, Map},
+    string::ArrayCString,
+    timer::{self, TimerState},
+    watcher::Watcher
+};
 
 asr::async_main!(stable);
 asr::panic_handler!();
@@ -19,174 +33,178 @@ struct Settings {
     Slow_PC_mode: bool
 }
 
-struct Addr {
-    startAddress: u32,
-    loadAddress: u32,
-    levelAddress: u32,
-    warRecordAddress: u32,
-    briefingAddress: u32,
-    mcAddress: u32,
-    fpsAddress: u32
+#[derive(Default)]
+struct Watchers {
+    startByte: Watcher<u8>,
+    loadByte: Watcher<u8>,
+    level: Watcher<ArrayCString<8>>,
+    warRecord: Watcher<ArrayCString<21>>,
+    briefingByte: Watcher<u8>,
+    mcByte: Watcher<u16>,
+    fpsFloat: Watcher<f32>
 }
 
-impl Addr {
-    fn steam() -> Self {
-        Self {
-            startAddress: 0x35DAD4,
-            loadAddress: 0x3A35A9,
-            levelAddress: 0x418EED,
-            warRecordAddress: 0x418AA8,
-            briefingAddress: 0x3B7299,
-            mcAddress: 0x3AE2E0,
-            fpsAddress: 0x368390
-        }
-    }
+struct Memory {
+    start: Address,
+    load: Address,
+    level: Address,
+    warRecord: Address,
+    briefing: Address,
+    mc: Address,
+    fps: Address
+}
 
-    fn gog() -> Self {
-        Self {
-            startAddress: 0x2DB89C,
-            loadAddress: 0x320D25,
-            levelAddress: 0x380CE5,
-            warRecordAddress: 0x394D28,
-            briefingAddress: 0x333F91,
-            mcAddress: 0x32B040,
-            fpsAddress: 0x2E60D0
+impl Memory {
+    async fn init(process: &Process, moduleName: &str) -> Self {
+        let baseModule = retry(|| process.get_module_address(moduleName)).await;
+        let baseModuleSize = retry(|| pe::read_size_of_image(process, baseModule)).await;
+        //asr::print_message(&format!("{}", baseModuleSize));
+
+        match baseModuleSize {
+            3805184 => Self {
+                start: baseModule + 0x2DB89C,
+                load: baseModule + 0x320D25,
+                level: baseModule + 0x380CE5,
+                warRecord: baseModule + 0x394D28,
+                briefing: baseModule + 0x333F91,
+                mc: baseModule + 0x32B040,
+                fps: baseModule + 0x2E60D0
+            },
+            _ => Self {
+                start: baseModule + 0x35DAD4,
+                load: baseModule + 0x3A35A9,
+                level: baseModule + 0x418EED,
+                warRecord: baseModule + 0x418AA8,
+                briefing: baseModule + 0x3B7299,
+                mc: baseModule + 0x3AE2E0,
+                fps: baseModule + 0x368390
+            }
         }
     }
+}
+
+fn start(watchers: &Watchers) -> bool {
+    watchers.briefingByte.pair.is_some_and(|val|
+        val.current == 1
+        && watchers.fpsFloat.pair.is_some_and(|val| val.current < 10000.0)
+    )
+    || watchers.loadByte.pair.is_some_and(|val|
+        val.changed_from_to(&0, &1)
+        && watchers.fpsFloat.pair.is_some_and(|val| val.current != 60.0)
+        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\Loadbar.dds"))
+    )
+}
+
+fn isWarRecord(watchers: &Watchers) -> bool {
+    watchers.fpsFloat.pair.is_some_and(|val| 
+        val.current != val.old
+        && val.old == 60.0
+        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\oldmenu1.dds"))
+    )
+}
+
+fn leftWarRecord(watchers: &Watchers) -> bool {
+    watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\loading\\level"))
+    || watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\frontsc2.dds"))
+}
+
+fn isLoading(watchers: &Watchers) -> Option<bool> {
+    Some(
+        watchers.loadByte.pair?.current == 0
+        && (watchers.briefingByte.pair?.current != 1 && watchers.fpsFloat.pair?.current < 10000.0)
+        || watchers.fpsFloat.pair?.current > 10000.0
+    )
+}
+
+fn split(watchers: &Watchers, settings: &Settings) -> bool {
+    match settings.Individual_level {
+        true => watchers.startByte.pair.is_some_and(|val| val.current == 5)
+        && watchers.mcByte.pair.is_some_and(|val| val.current == 256),
+        false => watchers.level.pair.is_some_and(|val|
+            val.changed()
+            || val.current.matches("level08d")
+            && watchers.startByte.pair.is_some_and(|val|
+                val.old == 5 && val.current == 2
+            )
+            || val.current.matches("level02a")
+            && watchers.startByte.pair.is_some_and(|val| val.current == 5)
+            && watchers.mcByte.pair.is_some_and(|val| val.current == 256)
+        )
+    }
+}
+
+fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
+    watchers.startByte.update_infallible(process.read(memory.start).unwrap_or_default());
+
+    watchers.loadByte.update_infallible(process.read(memory.load).unwrap_or(1));
+
+    watchers.briefingByte.update_infallible(process.read(memory.briefing).unwrap_or_default());
+    watchers.mcByte.update_infallible(process.read(memory.mc).unwrap_or_default());
+    watchers.fpsFloat.update_infallible(process.read(memory.fps).unwrap_or_default());
+
+    watchers.level.update_infallible(process.read(memory.level).unwrap_or_default());
+    watchers.warRecord.update_infallible(process.read(memory.warRecord).unwrap_or_default());
 }
 
 async fn main() {
     let mut settings = Settings::register();
     let mut map = Map::load();
 
-    let mut tickToggled = false;
     asr::set_tick_rate(60.0);
+    let mut tickToggled = false;
 
-    static mut startByte: u8 = 0;
-
-    static mut loadByte: u8 = 0;
-    static mut oldLoad: u8 = 0;
-    static mut briefingByte: u8 = 0;
-    static mut levelStr: &str = "";
-    static mut levelArray: [u8; 8] = [0; 8];
-    static mut oldLevel: [u8; 8] = [0; 8];
-
-    static mut oldStart: u8 = 0;
-
-    static mut fps: f32 = 0.0;
-    static mut oldFps: f32 = 0.0;
-
-    static mut mcByte: u16 = 0;
-
-    let mut warRecord: u8 = 0;
-    static mut warRecordArray: [u8; 21] = [0; 21];
-    static mut warRecordStr: &str = "";
-
-    let mut baseAddress = asr::Address::new(0);
-    let mut addrStruct = Addr::steam();
+    let mut warRec: u8 = 0;
     loop {
         let process = Process::wait_attach("SniperElite.exe").await;
 
         process.until_closes(async {
-            baseAddress = process.get_module_address("SniperElite.exe").unwrap_or_default();
+            let mut watchers = Watchers::default();
+            let memory = Memory::init(&process, "SniperElite.exe").await;
 
-            if let Ok(moduleSize) = process.get_module_size("SniperElite.exe") {
-                if moduleSize == 3805184 {
-                    addrStruct = Addr::gog();
+            loop {
+                settings.update();
+
+                if settings.Full_game_run && settings.Individual_level {
+                    map.store();
                 }
-            }
-            unsafe {
-                let start = || {
-                    if briefingByte == 1 && fps < 10000.0 ||
-                    (loadByte == 1 && oldLoad != 1) && fps != 60.0 && warRecordStr == "\\splash\\Loadbar.dds" {
-                        asr::timer::start();
-                    }
-                };
 
-                let levelSplit = || {
-                    if levelArray != oldLevel  {
-                        asr::timer::split();
-                    }
-                };
-
-                let mut isLoading = || {
-                    loadByte = process.read::<u8>(baseAddress + addrStruct.loadAddress).unwrap_or(1);
-                    briefingByte = process.read::<u8>(baseAddress + addrStruct.briefingAddress).unwrap_or(0);
-
-                    process.read_into_slice(baseAddress + addrStruct.warRecordAddress, &mut warRecordArray).unwrap_or_default();
-                    warRecordStr = str::from_utf8(&warRecordArray).unwrap_or("").split('\0').next().unwrap_or("");
-
-                    fps = process.read::<f32>(baseAddress + addrStruct.fpsAddress).unwrap_or(0.0);
-
-                    if fps != oldFps && oldFps == 60.0 && warRecordStr == "\\splash\\oldmenu1.dds" {
-                        warRecord = 1;
-                    }
-                    if warRecordStr == "\\splash\\loading\\level"
-                    || warRecordStr == "\\splash\\frontsc2.dds" {
-                        warRecord = 0;
-                    }
-
-                    if loadByte == 0 && (briefingByte != 1 && fps < 10000.0) && warRecord != 1
-                    || fps > 10000.0 {
-                        asr::timer::pause_game_time();
-                    }
-                    else {
-                        asr::timer::resume_game_time();
-                    }
-                };
-
-                let lastSplit = || {
-                    if levelStr == "level08d" && oldStart == 5 && startByte == 2
-                    || levelStr == "level02a" && startByte == 5 && mcByte == 256 {
-                        asr::timer::split();
-                    }
-                };
-
-                let individualLvl = || {
-                    if startByte == 5 && mcByte == 256 {
-                        asr::timer::split();
-                    }
-                };
-                loop {
-                    settings.update();
-
-                    if settings.Full_game_run && settings.Individual_level {
-                        map.store();
-                    }
-
-                    if settings.Slow_PC_mode && !tickToggled {
-                        asr::set_tick_rate(30.0);
-                        map = Map::load();
-                        tickToggled = true;
-                    }
-                    else if !settings.Slow_PC_mode && tickToggled {
-                        asr::set_tick_rate(60.0);
-                        map = Map::load();
-                        tickToggled = false;
-                    }
-
-                    startByte = process.read::<u8>(baseAddress + addrStruct.startAddress).unwrap_or(0);
-                    mcByte = process.read::<u16>(baseAddress + addrStruct.mcAddress).unwrap_or(0);
-
-                    process.read_into_slice(baseAddress + addrStruct.levelAddress, &mut levelArray).unwrap_or_default();
-                    levelStr = str::from_utf8(&levelArray).unwrap_or("").split('\0').next().unwrap_or("");
-
-                    if settings.Full_game_run {
-                        levelSplit();
-                        lastSplit();
-                    }
-                    if settings.Individual_level {
-                        individualLvl();
-                    }
-                    isLoading();
-                    start();
-
-                    oldStart = startByte;
-                    oldFps = fps;
-                    oldLevel = levelArray;
-                    oldLoad = loadByte;
-                    next_tick().await;
+                if settings.Slow_PC_mode && !tickToggled {
+                    asr::set_tick_rate(30.0);
+                    map = Map::load();
+                    tickToggled = true;
                 }
+                else if !settings.Slow_PC_mode && tickToggled {
+                    asr::set_tick_rate(60.0);
+                    map = Map::load();
+                    tickToggled = false;
+                }
+
+                if [TimerState::Running, TimerState::Paused].contains(&timer::state()) {
+                    if isWarRecord(&watchers) {
+                        warRec = 1;
+                        timer::resume_game_time();
+                    }
+                    if leftWarRecord(&watchers) {
+                        warRec = 0;
+                    }
+
+                    match isLoading(&watchers) {
+                        Some(true) => if warRec != 1 { timer::pause_game_time() },
+                        Some(false) => timer::resume_game_time(),
+                        _ => ()
+                    }
+
+                    if split(&watchers, &settings) {
+                        timer::split();
+                    }
+                }
+
+                if timer::state().eq(&TimerState::NotRunning) && start(&watchers) {
+                    timer::start();
+                }
+
+                mainLoop(&process, &memory, &mut watchers);
+                next_tick().await;
             }
         }).await;
     }
