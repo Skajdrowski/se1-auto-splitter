@@ -11,13 +11,14 @@
 )]
 
 use asr::{
-    Address, Process,
+    Address32, Process,
     file_format::pe,
     future::{next_tick, retry},
     settings::{Gui, Map},
     string::ArrayCString,
     timer::{self, TimerState},
-    watcher::Watcher
+    watcher::Watcher,
+    signature::Signature
 };
 
 asr::async_main!(stable);
@@ -45,40 +46,45 @@ struct Watchers {
 }
 
 struct Memory {
-    start: Address,
-    load: Address,
-    level: Address,
-    warRecord: Address,
-    briefing: Address,
-    mc: Address,
-    fps: Address
+    start: Address32,
+    load: Address32,
+    level: Address32,
+    warRecord: Address32,
+    briefing: Address32,
+    mc: Address32,
+    fps: Address32
 }
 
+//asr::print_message(&format!("{:#x}", syncPtr));
 impl Memory {
     async fn init(process: &Process) -> Self {
+        const startSIG: Signature<86> = Signature::new("a3 ?? ?? ?? ?? c7 05 ?? ?? ?? ?? ?? ?? ?? ?? c7 05 ?? ?? ?? ?? ?? ?? ?? ?? c6 05 ?? ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? c3 cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc 8b 54 24");
+        const loadSIG: Signature<11> = Signature::new("a0 ?? ?? ?? ?? 84 c0 74 ?? 56 be");
+        const levelSIG: Signature<8> = Signature::new("8a 88 ?? ?? ?? ?? 88 88");
+        const warRecordSIG: Signature<8> = Signature::new("88 15 ?? ?? ?? ?? 8a 10");
+        const briefingSIG: Signature<19> = Signature::new("c6 05 ?? ?? ?? ?? ?? 89 1d ?? ?? ?? ?? e8 ?? ?? ?? ?? 68");
+        const mcSIG: Signature<51> = Signature::new("a2 ?? ?? ?? ?? a2 ?? ?? ?? ?? a2 ?? ?? ?? ?? a2 ?? ?? ?? ?? a2 ?? ?? ?? ?? a2 ?? ?? ?? ?? a2 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? a3 ?? ?? ?? ?? c3");
+        const framerateSIG: Signature<18> = Signature::new("c7 05 ?? ?? ?? ?? ?? ?? ?? ?? d9 05 ?? ?? ?? ?? d8 35");
+
         let baseModule = retry(|| process.get_module_address("SniperElite.exe")).await;
         let baseModuleSize = retry(|| pe::read_size_of_image(process, baseModule)).await;
-        //asr::print_message(&format!("{}", baseModuleSize));
 
-        match baseModuleSize {
-            3805184 => Self {
-                start: baseModule + 0x2DB89C,
-                load: baseModule + 0x320D25,
-                level: baseModule + 0x380CE5,
-                warRecord: baseModule + 0x394D28,
-                briefing: baseModule + 0x333F91,
-                mc: baseModule + 0x32B040,
-                fps: baseModule + 0x2E60D0
-            },
-            _ => Self {
-                start: baseModule + 0x35DAD4,
-                load: baseModule + 0x3A35A9,
-                level: baseModule + 0x418EED,
-                warRecord: baseModule + 0x418AA8,
-                briefing: baseModule + 0x3B7299,
-                mc: baseModule + 0x3AE2E0,
-                fps: baseModule + 0x368390
-            }
+        let startScan = startSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 1;
+        let loadScan = loadSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 1;
+        let levelScan = levelSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 2;
+        let warRecordScan = warRecordSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 2;
+        let briefingScan = briefingSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 2;
+        let mcScan = mcSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 1;
+        let framerateScan = framerateSIG.scan_process_range(process, (baseModule, baseModuleSize.into())).unwrap() + 2;
+
+        Self {
+            start: process.read::<u32>(startScan).unwrap().into(),
+            load: process.read::<u32>(loadScan).unwrap().into(),
+            level: (process.read::<u32>(levelScan).unwrap() + 0xD).into(),
+            warRecord: process.read::<u32>(warRecordScan).unwrap().into(),
+            briefing: process.read::<u32>(briefingScan).unwrap().into(),
+            mc: process.read::<u32>(mcScan).unwrap().into(),
+            fps: process.read::<u32>(framerateScan).unwrap().into()
         }
     }
 }

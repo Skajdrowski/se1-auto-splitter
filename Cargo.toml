@@ -6,10 +6,9 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-asr = { git = "https://github.com/LiveSplit/asr", features = ["derive"] }
-
-# Bytemuck can be used to define structs that are being read from the game's process.
-#bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+asr = { git = "https://github.com/LiveSplit/asr", features = ["derive", "signature"] }
+#dlmalloc = { version = "0.2.8", features = ["global"] }
+#itoa = { version = "1", default-features = false }
 
 [lib]
 crate-type = ["cdylib"]
