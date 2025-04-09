@@ -128,6 +128,7 @@ fn split(watchers: &Watchers, settings: &Settings) -> bool {
         && watchers.mcByte.pair.is_some_and(|val| val.current == 256),
         false => watchers.level.pair.is_some_and(|val|
             val.changed()
+            && !val.current.matches("level02a")
             || val.current.matches("level08d")
             && watchers.startByte.pair.is_some_and(|val|
                 val.old == 5 && val.current == 2
