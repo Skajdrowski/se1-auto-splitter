@@ -38,8 +38,8 @@ struct Settings {
 struct Watchers {
     startByte: Watcher<u8>,
     loadByte: Watcher<u8>,
-    level: Watcher<ArrayCString<8>>,
-    warRecord: Watcher<ArrayCString<21>>,
+    level: Watcher<ArrayCString<3>>,
+    warRecord: Watcher<ArrayCString<13>>,
     briefingByte: Watcher<u8>,
     mcByte: Watcher<u16>,
     fpsFloat: Watcher<f32>
@@ -80,8 +80,8 @@ impl Memory {
         Self {
             start: process.read::<u32>(startScan).unwrap().into(),
             load: process.read::<u32>(loadScan).unwrap().into(),
-            level: (process.read::<u32>(levelScan).unwrap() + 0xD).into(),
-            warRecord: process.read::<u32>(warRecordScan).unwrap().into(),
+            level: (process.read::<u32>(levelScan).unwrap() + 0x12).into(),
+            warRecord: (process.read::<u32>(warRecordScan).unwrap() + 0x8).into(),
             briefing: process.read::<u32>(briefingScan).unwrap().into(),
             mc: process.read::<u32>(mcScan).unwrap().into(),
             fps: process.read::<u32>(framerateScan).unwrap().into()
@@ -97,7 +97,7 @@ fn start(watchers: &Watchers) -> bool {
     || watchers.loadByte.pair.is_some_and(|val|
         val.changed_from_to(&0, &1)
         && watchers.fpsFloat.pair.is_some_and(|val| val.current != 60.0)
-        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\Loadbar.dds"))
+        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("Loadbar.dds"))
     )
 }
 
@@ -105,13 +105,13 @@ fn isWarRecord(watchers: &Watchers) -> bool {
     watchers.fpsFloat.pair.is_some_and(|val| 
         val.current != val.old
         && val.old == 60.0
-        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\oldmenu1.dds"))
+        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("oldmenu1.dds"))
     )
 }
 
 fn leftWarRecord(watchers: &Watchers) -> bool {
-    watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\loading\\level"))
-    || watchers.warRecord.pair.is_some_and(|val| val.current.matches("\\splash\\frontsc2.dds"))
+    watchers.warRecord.pair.is_some_and(|val| val.current.matches("loading\\level"))
+    || watchers.warRecord.pair.is_some_and(|val| val.current.matches("frontsc2.dds"))
 }
 
 fn isLoading(watchers: &Watchers) -> Option<bool> {
@@ -128,12 +128,12 @@ fn split(watchers: &Watchers, settings: &Settings) -> bool {
         && watchers.mcByte.pair.is_some_and(|val| val.current == 256),
         false => watchers.level.pair.is_some_and(|val|
             val.changed()
-            && !val.current.matches("level02a")
-            || val.current.matches("level08d")
+            && !val.current.matches("02a")
+            || val.current.matches("08d")
             && watchers.startByte.pair.is_some_and(|val|
                 val.old == 5 && val.current == 2
             )
-            || val.current.matches("level02a")
+            || val.current.matches("02a")
             && watchers.startByte.pair.is_some_and(|val| val.current == 5)
             && watchers.mcByte.pair.is_some_and(|val| val.current == 256)
         )
