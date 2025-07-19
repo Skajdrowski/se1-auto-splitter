@@ -88,64 +88,64 @@ impl Memory {
 }
 
 fn start(watchers: &Watchers) -> bool {
-    watchers.briefingByte.pair.is_some_and(|val|
-        val.current == 1
-        && watchers.fpsFloat.pair.is_some_and(|val| val.current < 10000.0)
-    )
-    || watchers.loadByte.pair.is_some_and(|val|
-        val.changed_from_to(&0, &1)
-        && watchers.fpsFloat.pair.is_some_and(|val| val.current != 60.0)
-        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("Loadbar.dds"))
-    )
+    let fpsFloat = watchers.fpsFloat.pair.unwrap();
+    
+    watchers.briefingByte.pair.unwrap().current == 1
+    && fpsFloat.current < 10000.0
+    || watchers.loadByte.pair.unwrap().changed_from_to(&0, &1)
+    && fpsFloat.current != 60.0
+    && watchers.warRecord.pair.unwrap().current.matches("Loadbar.dds")
 }
 
 fn isWarRecord(watchers: &Watchers) -> bool {
-    watchers.fpsFloat.pair.is_some_and(|val| 
-        val.current != val.old
-        && val.old == 60.0
-        && watchers.warRecord.pair.is_some_and(|val| val.current.matches("oldmenu1.dds"))
-    )
+    let fpsFloat = watchers.fpsFloat.pair.unwrap();
+
+    fpsFloat.current != fpsFloat.old
+    && fpsFloat.old == 60.0
+    && watchers.warRecord.pair.unwrap().current.matches("oldmenu1.dds")
 }
 
 fn leftWarRecord(watchers: &Watchers) -> bool {
-    watchers.warRecord.pair.is_some_and(|val| val.current.matches("loading\\level"))
-    || watchers.warRecord.pair.is_some_and(|val| val.current.matches("frontsc2.dds"))
+    let warRecord = watchers.warRecord.pair.unwrap();
+
+    warRecord.current.matches("loading\\level")
+    || warRecord.current.matches("frontsc2.dds")
 }
 
 fn isLoading(watchers: &Watchers) -> Option<bool> {
     Some(
         watchers.loadByte.pair?.current == 0
-        && (watchers.briefingByte.pair?.current != 1 && watchers.fpsFloat.pair?.current < 10000.0)
+        && watchers.briefingByte.pair?.current != 1
         || watchers.fpsFloat.pair?.current > 10000.0
     )
 }
 
 fn split(watchers: &Watchers, settings: &Settings) -> bool {
     match settings.Individual_level {
-        true => watchers.startByte.pair.is_some_and(|val| val.current == 5)
-        && watchers.mcByte.pair.is_some_and(|val| val.current == 256),
-        false => watchers.level.pair.is_some_and(|val|
-            val.changed()
-            && !val.current.matches("02a")
-            || val.current.matches("08d")
-            && watchers.startByte.pair.is_some_and(|val|
-                val.old == 5 && val.current == 2
-            )
-            || val.current.matches("02a")
-            && watchers.startByte.pair.is_some_and(|val| val.current == 5)
-            && watchers.mcByte.pair.is_some_and(|val| val.current == 256)
-        )
+        true => watchers.startByte.pair.unwrap().current == 5
+        && watchers.mcByte.pair.unwrap().current == 256,
+        false => {
+            let level = watchers.level.pair.unwrap();
+
+            level.changed()
+            && !level.current.matches("02a")
+            || level.current.matches("08d")
+            && watchers.startByte.pair.unwrap().changed_from_to(&5, &2)
+            || level.current.matches("02a")
+            && watchers.startByte.pair.unwrap().current == 5
+            && watchers.mcByte.pair.unwrap().current == 256
+        }
     }
 }
 
 fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
-    watchers.startByte.update_infallible(process.read(memory.start).unwrap_or_default());
+    watchers.startByte.update_infallible(process.read(memory.start).unwrap_or(0));
 
     watchers.loadByte.update_infallible(process.read(memory.load).unwrap_or(1));
 
-    watchers.briefingByte.update_infallible(process.read(memory.briefing).unwrap_or_default());
-    watchers.mcByte.update_infallible(process.read(memory.mc).unwrap_or_default());
-    watchers.fpsFloat.update_infallible(process.read(memory.fps).unwrap_or_default());
+    watchers.briefingByte.update_infallible(process.read(memory.briefing).unwrap_or(0));
+    watchers.mcByte.update_infallible(process.read(memory.mc).unwrap_or(0));
+    watchers.fpsFloat.update_infallible(process.read(memory.fps).unwrap_or(0.0));
 
     watchers.level.update_infallible(process.read(memory.level).unwrap_or_default());
     watchers.warRecord.update_infallible(process.read(memory.warRecord).unwrap_or_default());
@@ -177,6 +177,8 @@ async fn main() {
                     tickToggled = false;
                 }
 
+                mainLoop(&process, &memory, &mut watchers);
+
                 if [TimerState::Running, TimerState::Paused].contains(&timer::state()) {
                     if isWarRecord(&watchers) {
                         warRec = 1;
@@ -201,9 +203,12 @@ async fn main() {
                     timer::start();
                 }
 
-                mainLoop(&process, &memory, &mut watchers);
                 next_tick().await;
             }
         }).await;
+
+        if timer::state().eq(&TimerState::Running) {
+            timer::pause_game_time();
+        }
     }
 }
