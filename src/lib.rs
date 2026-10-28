@@ -128,6 +128,7 @@ fn split(watchers: &Watchers, settings: &Settings) -> bool {
             let level = watchers.level.pair.unwrap();
 
             level.changed()
+            && !level.current.is_empty()
             && !level.current.matches("02a")
             || level.current.matches("08d")
             && watchers.startByte.pair.unwrap().changed_from_to(&5, &2)
