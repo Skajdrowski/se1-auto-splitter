@@ -154,7 +154,7 @@ fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
 async fn main() {
     let mut settings = Settings::register();
 
-    asr::set_tick_rate(60.0);
+    asr::set_tick_rate(120.0);
     let mut tickToggled = false;
 
     let mut warRec: u8 = 0;
@@ -169,11 +169,11 @@ async fn main() {
                 settings.update();
 
                 if settings.Slow_PC_mode && !tickToggled {
-                    asr::set_tick_rate(30.0);
+                    asr::set_tick_rate(60.0);
                     tickToggled = true;
                 }
                 else if !settings.Slow_PC_mode && tickToggled {
-                    asr::set_tick_rate(60.0);
+                    asr::set_tick_rate(120.0);
                     tickToggled = false;
                 }
 
