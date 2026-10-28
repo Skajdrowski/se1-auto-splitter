@@ -89,7 +89,7 @@ impl Memory {
 
 fn start(watchers: &Watchers) -> bool {
     let fpsFloat = watchers.fpsFloat.pair.unwrap();
-    
+
     watchers.briefingByte.pair.unwrap().current == 1
     && fpsFloat.current < 10000.0
     || watchers.loadByte.pair.unwrap().changed_from_to(&0, &1)
@@ -138,6 +138,16 @@ fn split(watchers: &Watchers, settings: &Settings) -> bool {
     }
 }
 
+fn reset(watchers: &Watchers, settings: &Settings) -> bool {
+    match settings.Individual_level {
+        true => watchers.loadByte.pair.unwrap().current == 0
+        && watchers.startByte.pair.unwrap().current != 255,
+        false => watchers.level.pair.unwrap().current.matches("01a")
+        && watchers.briefingByte.pair.unwrap().current == 1
+        && watchers.fpsFloat.pair.unwrap().current > 10000.0
+    }
+}
+
 fn mainLoop(process: &Process, memory: &Memory, watchers: &mut Watchers) {
     watchers.startByte.update_infallible(process.read(memory.start).unwrap_or(0));
 
@@ -179,7 +189,7 @@ async fn main() {
 
                 mainLoop(&process, &memory, &mut watchers);
 
-                if [TimerState::Running, TimerState::Paused].contains(&timer::state()) {
+                if [TimerState::Running].contains(&timer::state()) {
                     if isWarRecord(&watchers) {
                         warRec = 1;
                         timer::resume_game_time();
@@ -196,6 +206,16 @@ async fn main() {
 
                     if split(&watchers, &settings) {
                         timer::split();
+                    }
+
+                    if reset(&watchers, &settings) {
+                        if settings.Individual_level {
+                            timer::reset();
+                        }
+                        else {
+                            timer::undo_split();
+                            timer::reset();
+                        }
                     }
                 }
 
